@@ -4,7 +4,7 @@ import InterviewHeader from '@/components/InterviewHeader';
 import CodeEditor from '@/components/CodeEditor';
 import OutputPanel from '@/components/OutputPanel';
 import ParticipantsList from '@/components/ParticipantsList';
-import { mockAPI, executeCode, Interview } from '@/lib/mockBackend';
+import { mockAPI, executeCode, Interview, preloadPython, isPyodideLoaded } from '@/lib/mockBackend';
 import { toast } from 'sonner';
 
 const InterviewRoom: React.FC = () => {
@@ -71,6 +71,16 @@ const InterviewRoom: React.FC = () => {
   const handleLanguageChange = useCallback(async (newLanguage: string) => {
     if (id) {
       await mockAPI.updateLanguage(id, newLanguage);
+      
+      // Preload Python runtime when selected
+      if (newLanguage === 'python' && !isPyodideLoaded()) {
+        toast.info('Loading Python runtime...', { duration: 2000 });
+        preloadPython().then(() => {
+          toast.success('Python ready!', { duration: 1500 });
+        }).catch(() => {
+          toast.error('Failed to load Python runtime');
+        });
+      }
     }
   }, [id]);
 
@@ -81,6 +91,11 @@ const InterviewRoom: React.FC = () => {
     setIsRunning(true);
     setOutput('');
     setError(null);
+
+    // Show loading message for Python if runtime not ready
+    if (interview.language === 'python' && !isPyodideLoaded()) {
+      setOutput('Loading Python runtime (first run may take a few seconds)...');
+    }
 
     try {
       const result = await executeCode(code, interview.language);

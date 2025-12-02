@@ -2,6 +2,7 @@
 // This simulates backend behavior for the interview platform
 
 import { v4 as uuidv4 } from 'uuid';
+import { executePython, loadPyodide, isPyodideLoaded } from './pythonExecutor';
 
 export interface Interview {
   id: string;
@@ -155,15 +156,27 @@ const stripTypeScriptTypes = (code: string): string => {
     .replace(/\b(public|private|protected|readonly)\s+/g, '');
 };
 
+// Preload Pyodide for Python execution
+export const preloadPython = async (): Promise<void> => {
+  await loadPyodide();
+};
+
+export { isPyodideLoaded };
+
 // Safe code execution in browser sandbox
 export const executeCode = async (code: string, language: string): Promise<{ output: string; error: string | null }> => {
-  const supportedLanguages = ['javascript', 'typescript'];
+  const supportedLanguages = ['javascript', 'typescript', 'python'];
   
   if (!supportedLanguages.includes(language)) {
     return {
       output: '',
-      error: `Browser execution is only available for JavaScript and TypeScript. For ${language}, please use an external IDE or compiler.`,
+      error: `Browser execution is only available for JavaScript, TypeScript, and Python. For ${language}, please use an external IDE or compiler.`,
     };
+  }
+
+  // Handle Python execution
+  if (language === 'python') {
+    return executePython(code);
   }
 
   try {
