@@ -136,12 +136,33 @@ const notifySubscribers = (id: string) => {
   }
 };
 
+// Strip TypeScript types for browser execution
+const stripTypeScriptTypes = (code: string): string => {
+  return code
+    // Remove type annotations from variables and parameters
+    .replace(/:\s*[A-Za-z<>\[\]|&\s,{}]+(?=\s*[=,)\];{}])/g, '')
+    // Remove interface declarations
+    .replace(/interface\s+\w+\s*{[^}]*}/g, '')
+    // Remove type declarations
+    .replace(/type\s+\w+\s*=\s*[^;]+;/g, '')
+    // Remove generic type parameters
+    .replace(/<[A-Za-z,\s]+>/g, '')
+    // Remove 'as' type assertions
+    .replace(/\s+as\s+\w+/g, '')
+    // Remove export/import type statements
+    .replace(/(?:export|import)\s+type\s+[^;]+;/g, '')
+    // Remove access modifiers
+    .replace(/\b(public|private|protected|readonly)\s+/g, '');
+};
+
 // Safe code execution in browser sandbox
 export const executeCode = async (code: string, language: string): Promise<{ output: string; error: string | null }> => {
-  if (language !== 'javascript') {
+  const supportedLanguages = ['javascript', 'typescript'];
+  
+  if (!supportedLanguages.includes(language)) {
     return {
       output: '',
-      error: `Execution for ${language} is not supported in the browser. Only JavaScript can be executed.`,
+      error: `Browser execution is only available for JavaScript and TypeScript. For ${language}, please use an external IDE or compiler.`,
     };
   }
 
@@ -149,16 +170,35 @@ export const executeCode = async (code: string, language: string): Promise<{ out
     // Capture console.log outputs
     const logs: string[] = [];
     const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    
     console.log = (...args) => {
       logs.push(args.map(arg => 
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
       ).join(' '));
     };
+    console.warn = (...args) => {
+      logs.push(`⚠️ ${args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ')}`);
+    };
+    console.error = (...args) => {
+      logs.push(`❌ ${args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ')}`);
+    };
+
+    // Process code based on language
+    let processedCode = code;
+    if (language === 'typescript') {
+      processedCode = stripTypeScriptTypes(code);
+    }
 
     // Create a sandboxed function
     const sandboxedCode = `
       "use strict";
-      ${code}
+      ${processedCode}
     `;
     
     // Execute with timeout
@@ -176,8 +216,10 @@ export const executeCode = async (code: string, language: string): Promise<{ out
       }
     });
 
-    // Restore console.log
+    // Restore console methods
     console.log = originalLog;
+    console.warn = originalWarn;
+    console.error = originalError;
 
     const output = logs.join('\n') + (result !== undefined ? `\n→ ${JSON.stringify(result)}` : '');
     
